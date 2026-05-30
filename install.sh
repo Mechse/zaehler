@@ -11,74 +11,130 @@ set -euo pipefail
 
 REPO="https://github.com/Mechse/zaehler.git"
 INSTALL_DIR="${HOME}/.local/bin"
+RC_MARKER="# zaehler"
 
 # ----- pretty output --------------------------------------------------------
 
 red()    { printf "\033[31m%s\033[0m" "$*"; }
 green()  { printf "\033[32m%s\033[0m" "$*"; }
 yellow() { printf "\033[33m%s\033[0m" "$*"; }
+cyan()   { printf "\033[36m%s\033[0m" "$*"; }
 
 info()  { echo "$(green '==>') $*"; }
 warn()  { echo "$(yellow 'warn:') $*" >&2; }
-die()   { echo "$(red 'error:') $*" >&2; exit 1; }
+fail()  { echo "$(red 'error:') $*" >&2; exit 1; }
+
+# Prompts inside `curl | bash` only work if we read from /dev/tty directly.
+# When there's no tty we silently skip the question.
+ask_yn() {
+    local prompt="$1"
+    local default="${2:-n}"
+    if [ ! -t 0 ] && [ ! -r /dev/tty ]; then
+        return 1   # no tty; treat as "no"
+    fi
+    local hint="[y/N]"
+    [ "$default" = "y" ] && hint="[Y/n]"
+
+    local answer
+    if [ -r /dev/tty ]; then
+        read -r -p "$prompt $hint " answer </dev/tty
+    else
+        read -r -p "$prompt $hint " answer
+    fi
+    answer="${answer:-$default}"
+    [[ "$answer" =~ ^[yY](es)?$ ]]
+}
 
 # ----- platform detection ---------------------------------------------------
 
 case "$(uname -s)" in
     Darwin) PLATFORM=macos ;;
     Linux)  PLATFORM=linux ;;
-    *)      die "unsupported platform: $(uname -s)" ;;
+    *)      fail "unsupported platform: $(uname -s)" ;;
 esac
 
-info "detected platform: ${PLATFORM}"
+info "platform: ${PLATFORM}"
+
+# ----- Homebrew check (macOS only) -----------------------------------------
+
+if [ "$PLATFORM" = "macos" ]; then
+    if ! command -v brew >/dev/null 2>&1; then
+        cat <<EOM
+
+$(red 'Homebrew is required but not installed.')
+
+Install it first by following the instructions at:
+    https://brew.sh
+
+Then re-run this script.
+
+EOM
+        exit 1
+    fi
+    info "Homebrew: $(brew --version | head -1)"
+fi
 
 # ----- dependency checks ----------------------------------------------------
 
-check_cmd() {
-    if ! command -v "$1" >/dev/null 2>&1; then
-        return 1
-    fi
-}
+MISSING=()
 
-if ! check_cmd odin; then
-    if [ "$PLATFORM" = "macos" ]; then
-        die "odin not found. install with:  brew install odin"
-    else
-        die "odin not found. install instructions: https://odin-lang.org/docs/install/"
-    fi
-fi
-info "odin: $(odin version 2>&1 | head -1)"
-
-# OpenSSL: macOS uses Homebrew's openssl@3; Linux uses the system package.
-if [ "$PLATFORM" = "macos" ]; then
-    if [ ! -d "/opt/homebrew/opt/openssl@3" ] && [ ! -d "/usr/local/opt/openssl@3" ]; then
-        die "openssl@3 not found. install with:  brew install openssl@3"
-    fi
-    info "openssl@3 present"
+# Odin
+if ! command -v odin >/dev/null 2>&1; then
+    MISSING+=("odin")
 else
-    if [ ! -f "/usr/lib/x86_64-linux-gnu/libssl.so" ] \
-       && [ ! -f "/usr/lib/aarch64-linux-gnu/libssl.so" ] \
-       && [ ! -f "/usr/lib/libssl.so" ]; then
-        warn "libssl development files not found; you may need:  apt install libssl-dev"
+    info "odin:    $(odin version 2>&1 | head -1)"
+fi
+
+# OpenSSL 3
+if [ "$PLATFORM" = "macos" ]; then
+    if [ -d "/opt/homebrew/opt/openssl@3" ] || [ -d "/usr/local/opt/openssl@3" ]; then
+        info "openssl: openssl@3 (Homebrew)"
     else
-        info "libssl present"
+        MISSING+=("openssl@3")
+    fi
+else
+    if [ -f "/usr/lib/x86_64-linux-gnu/libssl.so" ] \
+       || [ -f "/usr/lib/aarch64-linux-gnu/libssl.so" ] \
+       || [ -f "/usr/lib/libssl.so" ]; then
+        info "openssl: libssl present"
+    else
+        MISSING+=("libssl-dev")
     fi
 fi
 
-# SQLite: macOS provides it in the dyld shared cache; Linux needs the package.
+# SQLite — macOS provides it via the dyld shared cache; check on Linux only.
 if [ "$PLATFORM" = "linux" ]; then
-    if [ ! -f "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0" ] \
-       && [ ! -f "/usr/lib/aarch64-linux-gnu/libsqlite3.so.0" ] \
-       && [ ! -f "/usr/lib/libsqlite3.so.0" ]; then
-        warn "libsqlite3 not found; you may need:  apt install libsqlite3-0"
+    if [ -f "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0" ] \
+       || [ -f "/usr/lib/aarch64-linux-gnu/libsqlite3.so.0" ] \
+       || [ -f "/usr/lib/libsqlite3.so.0" ]; then
+        info "sqlite:  libsqlite3 present"
     else
-        info "libsqlite3 present"
+        MISSING+=("libsqlite3-0")
     fi
+else
+    info "sqlite:  (system)"
+fi
+
+# ----- bail if anything is missing -----------------------------------------
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+    echo
+    echo "$(red 'Missing dependencies:') ${MISSING[*]}"
+    echo
+    if [ "$PLATFORM" = "macos" ]; then
+        echo "install with:"
+        echo "    $(cyan "brew install ${MISSING[*]}")"
+    else
+        echo "install with:"
+        echo "    $(cyan "sudo apt update && sudo apt install -y ${MISSING[*]}")"
+    fi
+    echo
+    echo "then re-run this script."
+    exit 1
 fi
 
 # ----- get the source -------------------------------------------------------
 
-# If we're running from inside a clone, use it. Otherwise clone to a temp dir.
 if [ -f "src/main.odin" ] && [ -f "build.sh" ]; then
     info "running from source checkout"
     SRC_DIR="$(pwd)"
@@ -107,14 +163,53 @@ info "installed: ${INSTALL_DIR}/zlr"
 # ----- PATH hint ------------------------------------------------------------
 
 if ! echo ":$PATH:" | grep -q ":$INSTALL_DIR:"; then
-    cat <<EOF
+    echo
+    warn "${INSTALL_DIR} is not on your PATH."
+    echo "add this to your shell rc:"
+    echo "    $(cyan "export PATH=\"\$HOME/.local/bin:\$PATH\"")"
+fi
 
-$(yellow 'note:') ${INSTALL_DIR} is not on your PATH.
-add this to your shell rc (~/.zshrc or ~/.bashrc):
+# ----- offer to set ANTHROPIC_BASE_URL in shell rc -------------------------
 
-    export PATH="\$HOME/.local/bin:\$PATH"
+# Detect the user's shell rc. Defaults to ~/.zshrc on macOS, ~/.bashrc on Linux.
+RC_FILE=""
+case "${SHELL##*/}" in
+    zsh)  RC_FILE="${HOME}/.zshrc" ;;
+    bash)
+        # macOS bash uses .bash_profile by convention; Linux uses .bashrc
+        if [ "$PLATFORM" = "macos" ] && [ -f "${HOME}/.bash_profile" ]; then
+            RC_FILE="${HOME}/.bash_profile"
+        else
+            RC_FILE="${HOME}/.bashrc"
+        fi
+        ;;
+    fish) RC_FILE="${HOME}/.config/fish/config.fish" ;;
+esac
 
-EOF
+if [ -n "$RC_FILE" ]; then
+    echo
+    if grep -q "ANTHROPIC_BASE_URL=http://localhost:8765" "$RC_FILE" 2>/dev/null; then
+        info "ANTHROPIC_BASE_URL already set in ${RC_FILE}"
+    elif ask_yn "Append \`export ANTHROPIC_BASE_URL=http://localhost:8765\` to ${RC_FILE}?"; then
+        {
+            echo ""
+            echo "${RC_MARKER} — route AI tools through the local proxy"
+            if [ "${RC_FILE##*.}" = "fish" ]; then
+                echo "set -x ANTHROPIC_BASE_URL http://localhost:8765"
+            else
+                echo "export ANTHROPIC_BASE_URL=http://localhost:8765"
+            fi
+        } >> "$RC_FILE"
+        info "added to ${RC_FILE}"
+        echo
+        echo "to apply in this shell, run:"
+        echo "    $(cyan "source ${RC_FILE}")"
+        echo "or open a new terminal."
+    else
+        echo
+        echo "skipped. to enable manually:"
+        echo "    $(cyan "export ANTHROPIC_BASE_URL=http://localhost:8765")"
+    fi
 fi
 
 # ----- cleanup --------------------------------------------------------------
@@ -123,20 +218,15 @@ if [ "$CLONED" = "1" ]; then
     rm -rf "$SRC_DIR"
 fi
 
-cat <<EOF
+cat <<EOM
 
 $(green 'done.') start the daemon with:
 
-    zlr daemon
+    $(cyan 'zlr start')
 
-then in another terminal:
+then use Claude Code (or any Anthropic SDK) normally. Watch usage with:
 
-    export ANTHROPIC_BASE_URL=http://localhost:8765
-    claude  # or whatever you use
+    $(cyan 'zlr today')
+    $(cyan 'zlr tail')
 
-and watch:
-
-    zlr today
-    zlr tail
-
-EOF
+EOM
