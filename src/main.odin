@@ -50,7 +50,6 @@ main :: proc() {
 run_start :: proc() {
 	if pid, ok := read_pid_file(); ok && is_process_running(pid) {
 		fmt.printfln("zlr: already running (pid %d)", pid)
-		print_env_hint()
 		os.exit(0)
 	}
 
