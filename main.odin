@@ -18,18 +18,12 @@ main :: proc() {
 			fmt.eprintfln("zlr: daemon failed:", err)
 			os.exit(1)
 		}
-		break
 
-	case "commit":
-		// Step 3: wrap `git commit`, capture the new SHA, and attribute
-		// every API call logged since the previous commit boundary to it.
-		fmt.eprintln("zlr commit: not implemented yet (roadmap step 3)")
-		os.exit(1)
+	case "today":
+		run_today()
 
-	case "show":
-		// Step 4: print token + cost stats for a given commit SHA.
-		fmt.eprintln("zlr show: not implemented yet (roadmap step 4)")
-		os.exit(1)
+	case "tail":
+		run_tail()
 
 	case "status":
 		// Step 4: show what's been logged since the last commit boundary.
@@ -51,8 +45,7 @@ print_usage :: proc() {
 	fmt.eprintln()
 	fmt.eprintln("commands:")
 	fmt.eprintln("  daemon, start   start the token-tracking proxy on port 8765")
-	fmt.eprintln("  commit -m MSG   run `git commit`, attributing recent API usage")
-	fmt.eprintln("  show SHA        show token + cost stats for a commit")
-	fmt.eprintln("  status          show usage logged since the last commit")
+	fmt.eprintln("  today           summary of today's calls and tokens")
+	fmt.eprintln("  tail [N]        last N calls (default 20)")
 	fmt.eprintln("  help            show this message")
 }

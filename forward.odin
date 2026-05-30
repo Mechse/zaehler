@@ -26,6 +26,7 @@ Forward_Error :: enum {
 // All zero means "we didn't find it" — Anthropic may have responded with
 // an error and no usage block, or the request wasn't a /v1/messages call.
 Usage :: struct {
+	model:                       string,
 	input_tokens:                int,
 	output_tokens:               int,
 	cache_creation_input_tokens: int,
@@ -49,6 +50,7 @@ parse_usage :: proc(body: []u8) -> Usage {
 	u.output_tokens = find_int_field(text, "\"output_tokens\":")
 	u.cache_creation_input_tokens = find_int_field(text, "\"cache_creation_input_tokens\":")
 	u.cache_read_input_tokens = find_int_field(text, "\"cache_read_input_tokens\":")
+	u.model = find_string_field(text, "\"model\":")
 
 	return u
 }
@@ -316,4 +318,24 @@ send_bad_gateway :: proc(client: net.TCP_Socket, reason: Forward_Error) {
 		body,
 	)
 	net.send_tcp(client, transmute([]u8)response)
+}
+
+// find_string_field finds the first `"key":` and returns the string literal
+// that follows (between the next pair of double quotes). Returns "" on miss.
+find_string_field :: proc(text: string, key: string) -> string {
+	idx := strings.index(text, key)
+	if idx == -1 {return ""}
+
+	// Skip past key and any whitespace
+	i := idx + len(key)
+	for i < len(text) && (text[i] == ' ' || text[i] == '\t') {i += 1}
+	if i >= len(text) || text[i] != '"' {return ""}
+	i += 1
+
+	// Find the closing quote
+	j := i
+	for j < len(text) && text[j] != '"' {j += 1}
+	if j >= len(text) {return ""}
+
+	return strings.clone(text[i:j], context.temp_allocator)
 }

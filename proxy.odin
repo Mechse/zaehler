@@ -2,13 +2,20 @@ package main
 
 import "core:fmt"
 import "core:net"
+import "core:os"
+import "core:time"
 
 // run_proxy starts the TCP listener and handles connections one at a time.
-//
-// Current state: forwards each request to api.anthropic.com over HTTPS and
-// STREAMS the response back to the client chunk-by-chunk. SQLite logging
-// is the next step.
+// Logs every forwarded API call to ~/.zaehler/zaehler.db.
 run_proxy :: proc(port: int) -> net.Network_Error {
+	// Open the SQLite database before we start listening. If this fails
+	// the daemon won't be useful, so we abort early.
+	if !store_open() {
+		fmt.eprintln("zlr: failed to open store; aborting")
+		os.exit(1)
+	}
+	defer store_close()
+
 	endpoint := net.Endpoint {
 		address = net.IP4_Loopback,
 		port    = port,
@@ -47,14 +54,9 @@ handle_connection :: proc(client: net.TCP_Socket, source: net.Endpoint) {
 
 	print_redacted(req)
 
-	// forward_to_anthropic streams the response straight back to `client`
-	// and tells us the byte count and token usage.
 	bytes, usage, fwd_err := forward_to_anthropic(req, client)
 	if fwd_err != .None {
 		fmt.eprintln("zlr: forward failed:", fwd_err)
-		// If forwarding failed before we started streaming, we can still
-		// send a 502. If failure was Client_Write_Failed, the client is
-		// already dead — sending another response would be pointless.
 		if fwd_err != .Client_Write_Failed {
 			send_bad_gateway(client, fwd_err)
 		}
@@ -68,5 +70,22 @@ handle_connection :: proc(client: net.TCP_Socket, source: net.Endpoint) {
 		usage.output_tokens,
 		usage.cache_creation_input_tokens,
 		usage.cache_read_input_tokens,
+	)
+
+
+	// Persist the call. Skip rows where ALL token counts are zero
+	// (health checks, errors, HEAD probes — they don't contribute to spend).
+	if has_usage(usage) {
+		ts := time.time_to_unix(time.now())
+		store_insert_call(ts, usage.model, req.path, usage, bytes)
+	}
+}
+
+has_usage :: proc(u: Usage) -> bool {
+	return(
+		u.input_tokens > 0 ||
+		u.output_tokens > 0 ||
+		u.cache_creation_input_tokens > 0 ||
+		u.cache_read_input_tokens > 0 \
 	)
 }
