@@ -31,6 +31,9 @@ main :: proc() {
 	case "today":
 		run_today()
 
+	case "watch":
+		run_watch()
+
 	case "week":
 		run_week()
 
@@ -118,6 +121,7 @@ print_usage :: proc() {
 	fmt.eprintln("  stop            stop a backgrounded proxy")
 	fmt.eprintln("  daemon          run the proxy in the foreground (for debugging)")
 	fmt.eprintln("  today           summary of today's calls and tokens")
+	fmt.eprintln("  watch           live-updating today view (press q to exit)")
 	fmt.eprintln("  week            last 7 days")
 	fmt.eprintln("  all             all-time totals")
 	fmt.eprintln("  tail [N]        last N calls (default 20)")
