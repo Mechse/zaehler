@@ -7,7 +7,7 @@ the AI API's (Claude, Codex, Gemini, ...). It logs the exact token usage of ever
 SQLite database. Nothing leaves your machine besides the request itself, which
 was going to Anthropic anyway.
 
-<img width="534" height="720" alt="export-1780166125531" src="https://github.com/user-attachments/assets/5d9d01e6-2f92-45b9-9998-49f95dc9c030" />
+<img width="534" height="720" alt="export-1780166108966" src="https://github.com/user-attachments/assets/223c24f5-41c7-49bf-8d49-8b412bd68e71" />
 
 ## Install
 
