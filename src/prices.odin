@@ -249,6 +249,7 @@ dechunk :: proc(body: []u8) -> []u8 {
 
 parse_anthropic_prices :: proc(text: string, out: ^map[string]Model_Price) {
 	pos := 0
+	count := 0
 	for {
 		next := strings.index(text[pos:], "\"claude-")
 		if next == -1 {break}
@@ -288,12 +289,25 @@ parse_anthropic_prices :: proc(text: string, out: ^map[string]Model_Price) {
 		p.cache_read_per_token = find_float_field(obj, "\"cache_read_input_token_cost\":")
 		p.cache_create_per_token = find_float_field(obj, "\"cache_creation_input_token_cost\":")
 
+		// DEBUG
+		count += 1
+		if count <= 5 || name == "claude-opus-4-8" {
+			fmt.eprintfln(
+				"zlr: parsed %s in=%v out=%v (obj_len=%d)",
+				name,
+				p.input_per_token,
+				p.output_per_token,
+				obj_end - obj_start,
+			)
+		}
+
 		if p.input_per_token > 0 && p.output_per_token > 0 {
 			out[strings.clone(name)] = p
 		}
 
 		pos = obj_end
 	}
+	fmt.eprintfln("zlr: total parse iterations: %d, map size: %d", count, len(out))
 }
 
 find_float_field :: proc(text: string, key: string) -> f64 {
