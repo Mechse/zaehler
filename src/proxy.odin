@@ -6,15 +6,22 @@ import "core:os"
 import "core:time"
 
 // run_proxy starts the TCP listener and handles connections one at a time.
-// Logs every forwarded API call to ~/.zaehler/zaehler.db.
+//
+// Two modes:
+//   - foreground (`zlr daemon`): stays attached to the terminal, prints
+//     per-connection diagnostics. Useful for debugging.
+//   - background (`zlr start`):  caller has already daemonized us; we just
+//     listen and write to the DB. stdout/stderr are /dev/null.
+//
+// In both modes the accept loop checks `should_exit` each iteration so a
+// SIGTERM (sent by `zlr stop`) ends the daemon cleanly.
 run_proxy :: proc(port: int) -> net.Network_Error {
-	// Open the SQLite database before we start listening. If this fails
-	// the daemon won't be useful, so we abort early.
 	if !store_open() {
 		fmt.eprintln("zlr: failed to open store; aborting")
 		os.exit(1)
 	}
 	defer store_close()
+	defer remove_pid_file()
 
 	endpoint := net.Endpoint {
 		address = net.IP4_Loopback,
@@ -25,17 +32,19 @@ run_proxy :: proc(port: int) -> net.Network_Error {
 	defer net.close(listener)
 
 	fmt.printfln("zlr daemon listening on http://127.0.0.1:%d", port)
-	fmt.println("point your tools at it with:")
-	fmt.printfln("  export ANTHROPIC_BASE_URL=http://localhost:%d", port)
 
-	for {
+	for !should_exit {
 		client, source, accept_err := net.accept_tcp(listener)
 		if accept_err != nil {
+			if should_exit { break }
 			fmt.eprintln("zlr: accept failed:", accept_err)
 			continue
 		}
 		handle_connection(client, source)
 	}
+
+	fmt.println("zlr: daemon exiting")
+	return nil
 }
 
 handle_connection :: proc(client: net.TCP_Socket, source: net.Endpoint) {
@@ -64,17 +73,15 @@ handle_connection :: proc(client: net.TCP_Socket, source: net.Endpoint) {
 	}
 
 	fmt.printfln(
-		"streamed %d bytes  |  in: %d  out: %d  cache_create: %d  cache_read: %d",
+		"streamed %d bytes  |  in: %d  out: %d  cache_create: %d  cache_read: %d  model: %s",
 		bytes,
 		usage.input_tokens,
 		usage.output_tokens,
 		usage.cache_creation_input_tokens,
 		usage.cache_read_input_tokens,
+		usage.model,
 	)
 
-
-	// Persist the call. Skip rows where ALL token counts are zero
-	// (health checks, errors, HEAD probes — they don't contribute to spend).
 	if has_usage(usage) {
 		ts := time.time_to_unix(time.now())
 		store_insert_call(ts, usage.model, req.path, usage, bytes)
@@ -82,10 +89,8 @@ handle_connection :: proc(client: net.TCP_Socket, source: net.Endpoint) {
 }
 
 has_usage :: proc(u: Usage) -> bool {
-	return(
-		u.input_tokens > 0 ||
-		u.output_tokens > 0 ||
-		u.cache_creation_input_tokens > 0 ||
-		u.cache_read_input_tokens > 0 \
-	)
+	return u.input_tokens  > 0 ||
+	       u.output_tokens > 0 ||
+	       u.cache_creation_input_tokens > 0 ||
+	       u.cache_read_input_tokens     > 0
 }
