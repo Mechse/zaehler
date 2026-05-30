@@ -1,4 +1,3 @@
-
 package main
 
 import "core:fmt"
@@ -48,9 +47,9 @@ handle_connection :: proc(client: net.TCP_Socket, source: net.Endpoint) {
 
 	print_redacted(req)
 
-	// forward_to_anthropic streams the response straight back to `client`.
-	// We just get a byte count for logging purposes.
-	bytes, fwd_err := forward_to_anthropic(req, client)
+	// forward_to_anthropic streams the response straight back to `client`
+	// and tells us the byte count and token usage.
+	bytes, usage, fwd_err := forward_to_anthropic(req, client)
 	if fwd_err != .None {
 		fmt.eprintln("zlr: forward failed:", fwd_err)
 		// If forwarding failed before we started streaming, we can still
@@ -62,5 +61,12 @@ handle_connection :: proc(client: net.TCP_Socket, source: net.Endpoint) {
 		return
 	}
 
-	fmt.printfln("streamed %d bytes to client", bytes)
+	fmt.printfln(
+		"streamed %d bytes  |  in: %d  out: %d  cache_create: %d  cache_read: %d",
+		bytes,
+		usage.input_tokens,
+		usage.output_tokens,
+		usage.cache_creation_input_tokens,
+		usage.cache_read_input_tokens,
+	)
 }
