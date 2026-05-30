@@ -2,7 +2,7 @@
 
 Track API token usage per request, locally.
 
-`zaehler` (binary: `zlr`) is a small daemon that sits between your AI tools and
+zaehler (binary: `zlr`) is a small daemon that sits between your AI tools and
 the AI API's (Claude, Codex, Gemini, ...). It logs the exact token usage of every call to a local
 SQLite database. Nothing leaves your machine besides the request itself, which
 was going to Anthropic anyway.
@@ -28,18 +28,17 @@ zlr today    # today's totals
 zlr tail     # last 20 calls
 
 zlr stop     # stop the daemon
-unset ANTHROPIC_BASE_URL
 ```
 
 ## Compatibility
 
 ### Operating systems
 
-| OS      | Supported  | Notes                                              |
-| ------- | ---------- | -------------------------------------------------- |
-| macOS   | ✅ yes     | tested on Apple Silicon                            |
-| Linux   | ✅ yes     | tested on Ubuntu/Debian                            |
-| Windows | ❌ no      | daemonization uses POSIX fork; needs separate port |
+| OS      | Supported  | 
+| ------- | ---------- |
+| macOS   | ✅ yes     |
+| Linux   | ✅ yes     |
+| Windows | ❌ no      |
 
 ### AI tools
 
