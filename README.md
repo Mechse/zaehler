@@ -10,13 +10,13 @@ was going to Anthropic anyway.
 ## Install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Mechse/zaehler/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/Mechse/zaehler/master/install.sh | bash
 ```
 
 ## Uninstall
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Mechse/zaehler/main/uninstall.sh | bash
+curl -sSL https://raw.githubusercontent.com/Mechse/zaehler/master/uninstall.sh | bash
 ```
 
 ## Use

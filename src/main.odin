@@ -60,7 +60,6 @@ main :: proc() {
 run_start :: proc() {
 	if pid, ok := read_pid_file(); ok && is_process_running(pid) {
 		fmt.printfln("zlr: already running (pid %d)", pid)
-		print_env_hint()
 		os.exit(0)
 	}
 
@@ -73,7 +72,6 @@ run_start :: proc() {
 	// FIRST, then calling daemonize(). The first fork-and-exit happens
 	// inside daemonize() so the parent's stdout already has our message.
 	fmt.printfln("zlr: starting daemon on http://127.0.0.1:%d", DEFAULT_PORT)
-	print_env_hint()
 
 	daemonize()
 
@@ -99,11 +97,6 @@ run_stop :: proc() {
 	print_unset_hint()
 }
 
-print_env_hint :: proc() {
-	fmt.println("")
-	fmt.println("to route your AI tools through the proxy, run:")
-	fmt.printfln("    export ANTHROPIC_BASE_URL=http://localhost:%d", DEFAULT_PORT)
-}
 
 print_unset_hint :: proc() {
 	fmt.println("")
