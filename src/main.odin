@@ -1,3 +1,4 @@
+
 package main
 
 import "core:fmt"
@@ -30,6 +31,12 @@ main :: proc() {
 	case "today":
 		run_today()
 
+	case "week":
+		run_week()
+
+	case "all":
+		run_all()
+
 	case "tail":
 		run_tail()
 
@@ -50,6 +57,7 @@ main :: proc() {
 run_start :: proc() {
 	if pid, ok := read_pid_file(); ok && is_process_running(pid) {
 		fmt.printfln("zlr: already running (pid %d)", pid)
+		print_env_hint()
 		os.exit(0)
 	}
 
@@ -62,6 +70,7 @@ run_start :: proc() {
 	// FIRST, then calling daemonize(). The first fork-and-exit happens
 	// inside daemonize() so the parent's stdout already has our message.
 	fmt.printfln("zlr: starting daemon on http://127.0.0.1:%d", DEFAULT_PORT)
+	print_env_hint()
 
 	daemonize()
 
@@ -87,6 +96,12 @@ run_stop :: proc() {
 	print_unset_hint()
 }
 
+print_env_hint :: proc() {
+	fmt.println("")
+	fmt.println("to route your AI tools through the proxy, run:")
+	fmt.printfln("    export ANTHROPIC_BASE_URL=http://localhost:%d", DEFAULT_PORT)
+}
+
 print_unset_hint :: proc() {
 	fmt.println("")
 	fmt.println("to stop routing tools through the proxy, run:")
@@ -103,6 +118,8 @@ print_usage :: proc() {
 	fmt.eprintln("  stop            stop a backgrounded proxy")
 	fmt.eprintln("  daemon          run the proxy in the foreground (for debugging)")
 	fmt.eprintln("  today           summary of today's calls and tokens")
+	fmt.eprintln("  week            last 7 days")
+	fmt.eprintln("  all             all-time totals")
 	fmt.eprintln("  tail [N]        last N calls (default 20)")
 	fmt.eprintln("  help            show this message")
 }

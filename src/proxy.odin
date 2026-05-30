@@ -5,16 +5,6 @@ import "core:net"
 import "core:os"
 import "core:time"
 
-// run_proxy starts the TCP listener and handles connections one at a time.
-//
-// Two modes:
-//   - foreground (`zlr daemon`): stays attached to the terminal, prints
-//     per-connection diagnostics. Useful for debugging.
-//   - background (`zlr start`):  caller has already daemonized us; we just
-//     listen and write to the DB. stdout/stderr are /dev/null.
-//
-// In both modes the accept loop checks `should_exit` each iteration so a
-// SIGTERM (sent by `zlr stop`) ends the daemon cleanly.
 run_proxy :: proc(port: int) -> net.Network_Error {
 	if !store_open() {
 		fmt.eprintln("zlr: failed to open store; aborting")
@@ -83,8 +73,12 @@ handle_connection :: proc(client: net.TCP_Socket, source: net.Endpoint) {
 	)
 
 	if has_usage(usage) {
+		// Look up the price NOW so we store it alongside the tokens.
+		// Future price changes won't retroactively alter historical costs.
+		price, has_price := price_for_model(usage.model)
+
 		ts := time.time_to_unix(time.now())
-		store_insert_call(ts, usage.model, req.path, usage, bytes)
+		store_insert_call(ts, usage.model, req.path, usage, bytes, price, has_price)
 	}
 }
 
